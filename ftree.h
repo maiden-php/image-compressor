@@ -8,4 +8,8 @@
  */
 int copy_ftree(const char *src, const char *dest);
 
+int copy_folder(const char *src, const char *dest);
+
+int copy_file(const char *src, const char *dest);
+
 #endif // _FTREE_H_

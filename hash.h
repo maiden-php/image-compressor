@@ -4,4 +4,6 @@
 // Hash manipulation helper functions
 char *hash(FILE *f);
 
+char *hashByFileName(const char *fName);
+
 #endif // _HASH_H_
