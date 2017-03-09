@@ -2,9 +2,15 @@
 #define _FTREE_H_
 
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <sys/stat.h>
-#include "dirent.h"
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/param.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "ftree.h"
 #include "hash.h"
@@ -28,6 +34,10 @@ int copy_folder(const char *src, const char *dest)
     struct stat destSt;
     char *srcPath;
     char *destPath;
+    int childPid;
+    int childStatus;
+    int numProcesses = 1;
+    int statchmod;
 
     DIR *dir;
     dir = opendir(src); // open source directory
@@ -65,14 +75,34 @@ int copy_folder(const char *src, const char *dest)
         if (S_ISREG(srcSt.st_mode)) {
             // grab the size of the destination and check if we need to copy the file
             stat(destPath, &destSt);
-            if (srcSt.st_size != destSt.st_size || hash(srcPath) != hash(destPath)) {
+            if (srcSt.st_size != destSt.st_size) { // || hash(srcPath) != hash(destPath)) {
                 // copy the file
-                copy_file(srcPath, destPath);
+                copy_file(srcPath, destPath, srcSt.st_mode);
+                // set permissions on file
+                fchmod(fileno(destPath), srcSt.st_mode);
             }
         }
         else if (S_ISDIR(srcSt.st_mode)) { 	// if it's a directory, 
-            //TODO
+            // create a child process
+            childPid = fork();
+            if (childPid == 0) {
+                // the child process is responsible for creating a folder and copying the contents inside that folder.
+
+                // keep the permissions
+                statchmod = srcSt.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+                mkdir(destPath, statchmod);
+                exit(copy_folder(srcPath, destPath));
+            }
+            else
+            {
+                // the parent process waits on the child
+                wait(&childStatus);
+                if (childStatus > 0)
+                    numProcesses += childStatus / 256;
+            }
         }
+
+
 
         // release memory for the allocated source and dest path strings
         free(srcPath);
@@ -80,6 +110,8 @@ int copy_folder(const char *src, const char *dest)
     }
 
     closedir(dir);
+
+    return numProcesses;
 }
 
 // Copies a file from source to destination

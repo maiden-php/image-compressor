@@ -3,7 +3,7 @@ DEPENDENCIES = hash.h ftree.h
 
 all: fcopy
 
-fcopy: fcopy.o ftree.o hash_functions.o
+fcopy: fcopy.o ftree.o hash.o
 	gcc ${FLAGS} -o $@ $^
 
 %.o: %.c ${DEPENDENCIES}
