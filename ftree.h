@@ -10,6 +10,6 @@ int copy_ftree(const char *src, const char *dest);
 
 int copy_folder(const char *src, const char *dest);
 
-int copy_file(const char *src, const char *dest);
+int copy_file(const char* src, const char* dest, mode_t permissions);
 
 #endif // _FTREE_H_

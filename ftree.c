@@ -9,8 +9,8 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 #include "ftree.h"
 #include "hash.h"
@@ -32,9 +32,6 @@ int copy_folder(const char *src, const char *dest)
 {
     struct stat srcSt;
     struct stat destSt;
-    char *srcPath;
-    char *destPath;
-    int childPid;
     int childStatus;
     int numProcesses = 1;
     int statchmod;
@@ -57,13 +54,13 @@ int copy_folder(const char *src, const char *dest)
         }
 
         // source path
-        srcPath = malloc(sizeof(char) * (strlen(src) + 2 + strlen(sd->d_name)));
+        char *srcPath = malloc(sizeof(char) * (strlen(src) + 2 + strlen(sd->d_name)));
         strcpy(srcPath, src);
         strcat(srcPath, "/");
         strcat(srcPath, sd->d_name);
 
         // destination path
-        destPath = malloc(sizeof(char) * (strlen(dest) + 2 + strlen(sd->d_name)));
+        char *destPath = malloc(sizeof(char) * (strlen(dest) + 2 + strlen(sd->d_name)));
         strcpy(destPath, dest);
         strcat(destPath, "/");
         strcat(destPath, sd->d_name);
@@ -75,16 +72,29 @@ int copy_folder(const char *src, const char *dest)
         if (S_ISREG(srcSt.st_mode)) {
             // grab the size of the destination and check if we need to copy the file
             stat(destPath, &destSt);
-            if (srcSt.st_size != destSt.st_size) { // || hash(srcPath) != hash(destPath)) {
-                // copy the file
+            if (errno != ENOENT) {
+                char *srcHash = hash_by_filename(srcPath);
+                char *destHash = hash_by_filename(destPath);
+
+                // check file size and hash
+                if ((srcSt.st_size != destSt.st_size) || compare_hashes(srcHash, destHash)) {
+                    
+                    // copy the file
+                    copy_file(srcPath, destPath, srcSt.st_mode);
+                }
+
+                free(srcHash);
+                free(destHash);
+            }
+            else
+            {
+                // file doesn't exist in target path so just copy it
                 copy_file(srcPath, destPath, srcSt.st_mode);
-                // set permissions on file
-                fchmod(fileno(destPath), srcSt.st_mode);
             }
         }
         else if (S_ISDIR(srcSt.st_mode)) { 	// if it's a directory, 
             // create a child process
-            childPid = fork();
+            int childPid = fork();
             if (childPid == 0) {
                 // the child process is responsible for creating a folder and copying the contents inside that folder.
 
@@ -115,7 +125,7 @@ int copy_folder(const char *src, const char *dest)
 }
 
 // Copies a file from source to destination
-int copy_file(const char* src, const char* dest)
+int copy_file(const char* src, const char* dest, mode_t permissions)
 {
     FILE *srcFile;
     FILE *destFile;
@@ -125,13 +135,13 @@ int copy_file(const char* src, const char* dest)
     
     // open source file for reading
     if ((srcFile = fopen(src, "rb")) == NULL) {
-        fprintf(stderr, "open read file error.\n");
+        fprintf(stderr, "Error opening source file: %s\n", src);
         return -1;
     }
 
     // open destination file for writing
     if ((destFile = fopen(dest, "wb")) == NULL) {
-        fprintf(stderr, "open write file error.\n");
+        fprintf(stderr, "Error opening destination file: %s\n", dest);
         return -1;
     }
 
@@ -140,7 +150,7 @@ int copy_file(const char* src, const char* dest)
         if ((bytes = fread(buffer, 1, sizeof(buffer), srcFile)) != BUFFER_SIZE) {
             // check for errors
             if (ferror(srcFile) != 0) {
-                fprintf(stderr, "read file error.\n");
+                fprintf(stderr, "Error reading file.\n");
                 return -1;
             }
         }
@@ -149,10 +159,13 @@ int copy_file(const char* src, const char* dest)
 
         // check for errors
         if (bytesWritten < 0) {
-            fprintf(stderr, "write file error.\n");
+            fprintf(stderr, "Error writing to file.\n");
             return -1;
         }
     }
+
+    // set permissions on file
+    fchmod(fileno(destFile), permissions);
 
     // close files
     fclose(srcFile);

@@ -144,7 +144,7 @@
   <ItemGroup>
     <ClCompile Include="fcopy.c" />
     <ClCompile Include="ftree.c" />
-    <ClCompile Include="hash.c" />
+    <ClCompile Include="hash_functions.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dirent.h" />
