@@ -18,16 +18,57 @@
 #define BUFFER_SIZE 1024
 
 
-/* Function for copying a file tree rooted at src to dest
- * Returns < 0 on error. The magnitude of the return value
- * is the number of processes involved in the copy and is
- * at least 1.
- */
-int copy_ftree(const char *src, const char *dest)
+// Copies a file from source to destination
+int copy_file(const char* src, const char* dest, mode_t permissions)
 {
-    return copy_folder(src, dest);
+    FILE *srcFile;
+    FILE *destFile;
+    char buffer[BUFFER_SIZE];
+    size_t bytes, bytesWritten;
+
+
+    // open source file for reading
+    if ((srcFile = fopen(src, "rb")) == NULL) {
+        fprintf(stderr, "Error opening source file: %s\n", src);
+        return -1;
+    }
+
+    // open destination file for writing
+    if ((destFile = fopen(dest, "wb")) == NULL) {
+        fprintf(stderr, "Error opening destination file: %s\n", dest);
+        return -1;
+    }
+
+    while (feof(srcFile) == 0) {
+        // read chunk from source
+        if ((bytes = fread(buffer, 1, sizeof(buffer), srcFile)) != BUFFER_SIZE) {
+            // check for errors
+            if (ferror(srcFile) != 0) {
+                fprintf(stderr, "Error reading file.\n");
+                return -1;
+            }
+        }
+        // write it to dest
+        bytesWritten = fwrite(buffer, 1, bytes, destFile);
+
+        // check for errors
+        if (bytesWritten < 0) {
+            fprintf(stderr, "Error writing to file.\n");
+            return -1;
+        }
+    }
+
+    // set permissions on file
+    fchmod(fileno(destFile), permissions);
+
+    // close files
+    fclose(srcFile);
+    fclose(destFile);
+
+    return 0;
 }
 
+// copy source folder contents into dest folder creating child processes for each sub folder.
 int copy_folder(const char *src, const char *dest)
 {
     struct stat srcSt;
@@ -124,54 +165,33 @@ int copy_folder(const char *src, const char *dest)
     return numProcesses;
 }
 
-// Copies a file from source to destination
-int copy_file(const char* src, const char* dest, mode_t permissions)
+
+/* Function for copying a file tree rooted at src to dest
+* Returns < 0 on error. The magnitude of the return value
+* is the number of processes involved in the copy and is
+* at least 1.
+*/
+int copy_ftree(const char *src, const char *dest)
 {
-    FILE *srcFile;
-    FILE *destFile;
-    char buffer[BUFFER_SIZE];
-    size_t bytes, bytesWritten;
+    // read information about source folder
+    struct stat srcSt;
+    stat(src, &srcSt);
+    int statchmod = srcSt.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
 
-    
-    // open source file for reading
-    if ((srcFile = fopen(src, "rb")) == NULL) {
-        fprintf(stderr, "Error opening source file: %s\n", src);
-        return -1;
-    }
+    // create source folder inside dest folder
+    char* destPath = malloc(sizeof(char) * strlen(dest) + strlen(src) + 1);
+    strcpy(destPath, dest);
+    strcat(destPath, "/");
+    strcat(destPath, src);
+    mkdir(destPath, statchmod);
 
-    // open destination file for writing
-    if ((destFile = fopen(dest, "wb")) == NULL) {
-        fprintf(stderr, "Error opening destination file: %s\n", dest);
-        return -1;
-    }
 
-    while (feof(srcFile) == 0) {
-        // read chunk from source
-        if ((bytes = fread(buffer, 1, sizeof(buffer), srcFile)) != BUFFER_SIZE) {
-            // check for errors
-            if (ferror(srcFile) != 0) {
-                fprintf(stderr, "Error reading file.\n");
-                return -1;
-            }
-        }
-        // write it to dest
-        bytesWritten = fwrite(buffer, 1, bytes, destFile);
+    int numProcesses = copy_folder(src, destPath);
 
-        // check for errors
-        if (bytesWritten < 0) {
-            fprintf(stderr, "Error writing to file.\n");
-            return -1;
-        }
-    }
+    free(destPath);
 
-    // set permissions on file
-    fchmod(fileno(destFile), permissions);
+    return numProcesses;
 
-    // close files
-    fclose(srcFile);
-    fclose(destFile);
-
-    return 0;
 }
 
 #endif // _FTREE_H_
