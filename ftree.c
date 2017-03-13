@@ -11,6 +11,7 @@
 #include <sys/param.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <libgen.h>
 
 #include "ftree.h"
 #include "hash.h"
@@ -178,11 +179,15 @@ int copy_ftree(const char *src, const char *dest)
     stat(src, &srcSt);
     int statchmod = srcSt.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
 
-    // create source folder inside dest folder
-    char* destPath = malloc(sizeof(char) * strlen(dest) + strlen(src) + 1);
+
+    // build name of destination path where to copy the contents of source
+    // if src is /a/b/c and dest is /t then the result should be something like: dest/base(src) which is /t/c
+    char *baseSrc = strdup(basename((char*)src));
+    char *destPath = malloc(sizeof(char) * strlen(dest) + strlen(src) + 1);
     strcpy(destPath, dest);
     strcat(destPath, "/");
-    strcat(destPath, src);
+    strcat(destPath, baseSrc);
+    // create source folder inside dest folder
     mkdir(destPath, statchmod);
 
 
