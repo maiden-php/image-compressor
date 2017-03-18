@@ -12,158 +12,282 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <libgen.h>
+#include <sys/mman.h>
 
 #include "ftree.h"
 #include "hash.h"
 
 #define BUFFER_SIZE 1024
 
+// Use a shared variable to flag errors.
+// The reason why we use this is to allow for us to keep copying when there are errors in our child processes.
+// Because using negative exit codes is not reliable (since exit codes are in the range 0-255) it would be hard
+// to track how many child processes were created.
+static int *error;
 
-// Copies a file from source to destination
+// Copies a file from source to destination.
 int copy_file(const char* src, const char* dest, mode_t permissions)
 {
-    FILE *srcFile;
-    FILE *destFile;
+    FILE *src_file;
+    FILE *dest_file;
     char buffer[BUFFER_SIZE];
-    size_t bytes, bytesWritten;
 
-
-    // open source file for reading
-    if ((srcFile = fopen(src, "rb")) == NULL) {
-        fprintf(stderr, "Error opening source file: %s\n", src);
+    // Open source file for reading.
+    if ((src_file = fopen(src, "rb")) == NULL)
+    {
+        perror("Error opening source file");
         return -1;
     }
 
-    // open destination file for writing
-    if ((destFile = fopen(dest, "wb")) == NULL) {
-        fprintf(stderr, "Error opening destination file: %s\n", dest);
+    // Open destination file for writing.
+    if ((dest_file = fopen(dest, "wb")) == NULL)
+    {
+        fclose(src_file);
+        perror("Error opening destination file");
         return -1;
     }
 
-    while (feof(srcFile) == 0) {
-        // read chunk from source
-        if ((bytes = fread(buffer, 1, sizeof(buffer), srcFile)) != BUFFER_SIZE) {
+    // Error indicates if there was an error while copying the file.
+    int error = -1;
+
+    while (feof(src_file) == 0)
+    {
+        // Read chunk from source.
+        size_t bytes;
+        if ((bytes = fread(buffer, 1, sizeof(buffer), src_file)) != BUFFER_SIZE)
+        {
             // check for errors
-            if (ferror(srcFile) != 0) {
-                fprintf(stderr, "Error reading file.\n");
+            if (ferror(src_file) != 0)
+            {
+                perror("Error reading file");
+                goto close_with_error;
+            }
+        }
+        // Write it to dest.
+        size_t bytes_written = fwrite(buffer, 1, bytes, dest_file);
+
+        // Check for errors.
+        if (bytes_written < 0)
+        {
+            perror("Error writing to file");
+            goto close_with_error;
+        }
+    }
+
+    // Set permissions on file.
+    if (fchmod(fileno(dest_file), permissions) != 0)
+    {
+        perror("Error setting permissions on file");
+        goto close_with_error;
+    }
+
+    // If we reached this point means we have no errors.
+    error = 0;
+
+close_with_error:
+
+    // Close files.
+    fclose(src_file);
+    fclose(dest_file);
+
+    return error;
+}
+
+/* Create a folder with set permissions. If folder exists just set the permissions.
+* Returns 0 on success, -1 otherwise.
+*/
+int create_folder(char *path, int permissions)
+{
+    // Try to create a directory.
+    if (mkdir(path, permissions) != 0)
+    {
+        // If directory already exists
+        if (errno == EEXIST)
+        {
+            // Set the permissions
+            if (chmod(path, permissions) != 0)
+            {
+                perror("Error setting permissions on directory");
                 return -1;
             }
         }
-        // write it to dest
-        bytesWritten = fwrite(buffer, 1, bytes, destFile);
-
-        // check for errors
-        if (bytesWritten < 0) {
-            fprintf(stderr, "Error writing to file.\n");
+        else
+        {
+            perror("Error creating directory");
             return -1;
         }
     }
 
-    // set permissions on file
-    fchmod(fileno(destFile), permissions);
-
-    // close files
-    fclose(srcFile);
-    fclose(destFile);
-
     return 0;
 }
 
-// copy source folder contents into dest folder creating child processes for each sub folder.
-int copy_folder(const char *src, const char *dest)
+/* Recursively copy the source directory contents into the destination directory creating child processes for each sub directory.
+* Returns the number of processes used in the copy.
+*/
+int copy_directory(const char *src, const char *dest)
 {
-    struct stat srcSt;
-    struct stat destSt;
-    int childStatus;
-    int numProcesses = 1;
-    int statchmod;
+    int num_processes = 1;
 
-    DIR *dir;
-    dir = opendir(src); // open source directory
-    struct dirent *sd;
+    // Open the source directory.
+    DIR *dir = opendir(src);
 
-    if (dir == NULL) {
-        printf("Error, unable to open directory \n");
+    // Check for error.
+    if (dir == NULL)
+    {
+        perror("Error opening directory");
         return -1;
     }
 
-    // go through each entry in our folder
-    while ((sd = readdir(dir)) != NULL) {
-
-        // skip . and .. directories
-        if (!strcmp(sd->d_name, ".") || !strcmp(sd->d_name, "..")) {
+    // Iterate over each file/directory/link in our current source directory.
+    struct dirent *sd;
+    while ((sd = readdir(dir)) != NULL)
+    {
+        // Skip . and ..
+        if (!strcmp(sd->d_name, ".") || !strcmp(sd->d_name, ".."))
+        {
             continue;
         }
 
-        // source path
-        char *srcPath = malloc(sizeof(char) * (strlen(src) + 2 + strlen(sd->d_name)));
-        strcpy(srcPath, src);
-        strcat(srcPath, "/");
-        strcat(srcPath, sd->d_name);
+        // Build source path.
+        char *src_path = malloc(sizeof(char) * (strlen(src) + 1 + strlen(sd->d_name)));
+        if (src_path == NULL)
+        {
+            perror("Error allocating memory.");
+            *error = -1;
+            continue;
+        }
+        strcpy(src_path, src);
+        strcat(strcat(src_path, "/"), sd->d_name);
 
-        // destination path
-        char *destPath = malloc(sizeof(char) * (strlen(dest) + 2 + strlen(sd->d_name)));
-        strcpy(destPath, dest);
-        strcat(destPath, "/");
-        strcat(destPath, sd->d_name);
 
-        // gets all the information from the file, dir, or symlink
-        stat(srcPath, &srcSt);
+        // Build destination path.
+        char *dest_path = malloc(sizeof(char) * (strlen(dest) + 1 + strlen(sd->d_name)));
+        if (dest_path == NULL)
+        {
+            perror("Error allocating memory.");
+            *error = -1;
+            continue;
+        }
+        strcpy(dest_path, dest);
+        strcat(strcat(dest_path, "/"), sd->d_name);
 
-        // if it's a regular file
-        if (S_ISREG(srcSt.st_mode)) {
-            // grab the size of the destination and check if we need to copy the file
-            stat(destPath, &destSt);
-            if (errno != ENOENT) {
-                char *srcHash = hash_by_filename(srcPath);
-                char *destHash = hash_by_filename(destPath);
 
-                // check file size and hash
-                if ((srcSt.st_size != destSt.st_size) || compare_hashes(srcHash, destHash)) {
-                    
-                    // copy the file
-                    copy_file(srcPath, destPath, srcSt.st_mode);
+        // Retrieve information from the file / directory / symlink.
+        struct stat src_st;
+        if (stat(src_path, &src_st) < 0)
+        {
+            perror("Error reading information about source file");
+            *error = -1;
+
+            // Skip everything else except freeing memory for the source and destination paths.
+            goto free_memory;
+        }
+
+        // Check if current entry is a regular file.
+        if (S_ISREG(src_st.st_mode))
+        {
+            // Retrieve information about the destination to check if we need to copy the file.
+            struct stat dest_st;
+            if (stat(dest_path, &dest_st) < 0 && errno != ENOENT)
+            {
+                perror("Error reading information about destination file");
+                *error = -1;
+
+                // Skip everything else except freeing memory for the source and destination paths.
+                goto free_memory;
+            }
+            
+            // Check if the file exists in the destination directory.
+            if (errno == ENOENT)
+            {
+                // File doesn't exist - copy it.
+                *error = copy_file(src_path, dest_path, src_st.st_mode);
+            }
+            else
+            {
+                // If files don't have the same size we should just copy them and skip the hash calculation
+                // which can be slow.
+                if (src_st.st_size != dest_st.st_size)
+                {
+                    // Sizes don't match - copy the file.
+                    *error = copy_file(src_path, dest_path, src_st.st_mode);
                 }
+                else
+                {
+                    // Retrieve file hashes for comparison.
+                    char *src_hash = hash_by_filename(src_path);
+                    char *dest_hash = hash_by_filename(dest_path);
 
-                free(srcHash);
-                free(destHash);
+                    // Source hash has to exist but destination hash might not, that's why we only check for
+                    // errors on the source hash.
+                    if (src_hash == NULL)
+                    {
+                        perror("Error reading hash from source");
+                        *error = -1;
+                    }
+                    // Compare hashes to see if they match.
+                    else if (compare_hashes(src_hash, dest_hash) != 0)
+                    {
+                        // copy the file
+                        *error = copy_file(src_path, dest_path, src_st.st_mode);
+                    }
+
+                    // release memory for hashes
+                    free(src_hash);
+                    free(dest_hash);
+                }
+            }
+        }
+        // Check if it's a directory.
+        else if (S_ISDIR(src_st.st_mode))
+        {
+            // It is a directory so we create a child process to recursively call copy_folder and perform
+            // the copy of the sub directories.
+            int child_pid = fork();
+            
+            // Check if this is the child process.
+            if (child_pid == 0)
+            {
+                // Create a directory with same permissions as source directory.
+                int permissions = src_st.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+                if (create_folder(dest_path, permissions) != 0)
+                {
+                    *error = -1;
+                }
+                
+                // Perform the recursive copy of the sub directory.
+                exit(copy_directory(src_path, dest_path));
             }
             else
             {
-                // file doesn't exist in target path so just copy it
-                copy_file(srcPath, destPath, srcSt.st_mode);
-            }
-        }
-        else if (S_ISDIR(srcSt.st_mode)) { 	// if it's a directory, 
-            // create a child process
-            int childPid = fork();
-            if (childPid == 0) {
-                // the child process is responsible for creating a folder and copying the contents inside that folder.
+                // If not child then it's the parent process.
 
-                // keep the permissions
-                statchmod = srcSt.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
-                mkdir(destPath, statchmod);
-                exit(copy_folder(srcPath, destPath));
-            }
-            else
-            {
-                // the parent process waits on the child
-                wait(&childStatus);
-                if (childStatus > 0)
-                    numProcesses += childStatus / 256;
+                // Waits on the child and checks on error codes
+                int status = 0;
+                if (wait(&status) != child_pid)
+                {
+                    perror("Error waiting for child");
+                    *error = -1;
+                }
+                
+                // Update the number of child processes.
+                num_processes += status >> 8;
             }
         }
 
-
-
-        // release memory for the allocated source and dest path strings
-        free(srcPath);
-        free(destPath);
+free_memory:
+        // Release strings allocated for source and destination path.
+        free(src_path);
+        free(dest_path);
     }
 
-    closedir(dir);
+    if (closedir(dir) != 0)
+    {
+        perror("Error closing directory");
+        *error = -1;
+    }
 
-    return numProcesses;
+    return error >=0 ? num_processes : -num_processes;
 }
 
 
@@ -174,29 +298,48 @@ int copy_folder(const char *src, const char *dest)
 */
 int copy_ftree(const char *src, const char *dest)
 {
-    // read information about source folder
-    struct stat srcSt;
-    stat(src, &srcSt);
-    int statchmod = srcSt.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+    // Read information about source directory.
+    struct stat src_st;
+    stat(src, &src_st);
 
+    // Build name of destination path where to copy the contents of source.
+    // If src is /a/b/c and dest is /t then the result should be something like: dest/base(src) which is /t/c .
+    char *base_src = strdup(basename((char*)src));
+    char *dest_path = malloc(sizeof(char) * strlen(dest) + strlen(src) + 1);
+    strcpy(dest_path, dest);
+    strcat(strcat(dest_path, "/"), base_src);
+    
+    // Create source directory inside destination directory and keep its permissions.
+    int permissions = src_st.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+    if (create_folder(dest_path, permissions) != 0)
+    {
+        return -1;
+    }
 
-    // build name of destination path where to copy the contents of source
-    // if src is /a/b/c and dest is /t then the result should be something like: dest/base(src) which is /t/c
-    char *baseSrc = strdup(basename((char*)src));
-    char *destPath = malloc(sizeof(char) * strlen(dest) + strlen(src) + 1);
-    strcpy(destPath, dest);
-    strcat(destPath, "/");
-    strcat(destPath, baseSrc);
-    // create source folder inside dest folder
-    mkdir(destPath, statchmod);
+    // Initialize shared memory to set error flag.
+    error = mmap(NULL, sizeof *error, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (error == MAP_FAILED)
+    {
+        perror("Error creating shared memory");
+        return -1;
+    }
 
+    // No errors to begin with.
+    *error = 0;
 
-    int numProcesses = copy_folder(src, destPath);
+    // Perform the copy of the source to destination folder.
+    int num_processes = copy_directory(src, dest_path);
 
-    free(destPath);
+    // Free the string allocated for destination path.
+    free(dest_path);
 
-    return numProcesses;
+    // Update our number of processes by checking if any child reported an error.
+    num_processes *= (*error >= 0 ? 1 : -1);
 
+    // Free shared memory.
+    munmap(error, sizeof *error);
+
+    return num_processes;
 }
 
 #endif // _FTREE_H_
