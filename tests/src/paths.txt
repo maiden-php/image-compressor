@@ -1,0 +1,1 @@
+./fcopy /home/yichen/Desktop/CSC209/csc209-assignment-3/tests/src /home/yichen/Desktop/CSC209/csc209-assignment-3/tests/dest
