@@ -8,8 +8,15 @@
  */
 int copy_ftree(const char *src, const char *dest);
 
-int copy_folder(const char *src, const char *dest);
+/* Recursively copy the source directory contents into the
+ * destination directory creating child processes for each
+ * sub directory.
+ * Returns the number of processes used in the copy.
+ */
+int copy_directory(const char *src, const char *dest);
 
+/* Copies a file from source to destination.
+*/
 int copy_file(const char* src, const char* dest, mode_t permissions);
 
 #endif // _FTREE_H_

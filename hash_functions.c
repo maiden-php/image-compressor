@@ -25,14 +25,14 @@ char *hash(FILE *f) {
 }
 
 // Compare two hashes. Returns 0 if they match.
-short compare_hashes(const char *src, const char *dest)
+short compare_hashes(const char *h1, const char *h2)
 {
-    return memcmp(src, dest, sizeof(char) * block_size);
+    return memcmp(h1, h2, sizeof(char) * block_size);
 }
 
 // Tries to compute the hash for a file with the file name passed into the function.
 // Returns hash if successful or NULL otherwise.
-char *hash_by_filename(const char *file_name)
+char *hash_file_name(const char *file_name)
 {
     FILE *f;
     char *res;

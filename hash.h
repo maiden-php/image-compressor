@@ -4,8 +4,11 @@
 // Hash manipulation helper functions
 char *hash(FILE *f);
 
-short compare_hashes(const char *src, const char *dest);
+// Compare two hashes. Returns 0 if they match.
+short compare_hashes(const char *h1, const char *h2);
 
-char *hash_by_filename(const char *fName);
+// Tries to compute the hash for a file with the file name passed into the function.
+// Returns hash if successful or NULL otherwise.
+char *hash_file_name(const char *file_name);
 
 #endif // _HASH_H_
