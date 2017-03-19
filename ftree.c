@@ -201,7 +201,10 @@ int copy_directory(const char *src, const char *dest)
             if (errno == ENOENT)
             {
                 // File doesn't exist - copy it.
-                *error = copy_file(src_path, dest_path, src_st.st_mode);
+                if (copy_file(src_path, dest_path, src_st.st_mode) < 0)
+                {
+                    *error = -1;
+                }
             }
             else
             {
@@ -210,7 +213,10 @@ int copy_directory(const char *src, const char *dest)
                 if (src_st.st_size != dest_st.st_size)
                 {
                     // Sizes don't match - copy the file.
-                    *error = copy_file(src_path, dest_path, src_st.st_mode);
+                    if (copy_file(src_path, dest_path, src_st.st_mode) < 0)
+                    {
+                        *error = -1;
+                    }
                 }
                 else
                 {
@@ -229,7 +235,10 @@ int copy_directory(const char *src, const char *dest)
                     else if (compare_hashes(src_hash, dest_hash) != 0)
                     {
                         // copy the file
-                        *error = copy_file(src_path, dest_path, src_st.st_mode);
+                        if (copy_file(src_path, dest_path, src_st.st_mode) < 0)
+                        {
+                            *error = -1;
+                        }
                     }
 
                     // release memory for hashes
