@@ -33,6 +33,7 @@ int copy_file(const char* src, const char* dest, mode_t permissions) {
 
     // Open source file for reading.
     if ((src_file = fopen(src, "rb")) == NULL) {
+        printf("%s\n", src);
         perror("Error opening source file");
         return -1;
     }
@@ -40,6 +41,7 @@ int copy_file(const char* src, const char* dest, mode_t permissions) {
     // Open destination file for writing.
     if ((dest_file = fopen(dest, "wb")) == NULL) {
         fclose(src_file);
+        printf("%s\n", dest);
         perror("Error opening destination file");
         return -1;
     }
@@ -53,6 +55,7 @@ int copy_file(const char* src, const char* dest, mode_t permissions) {
         if ((bytes = fread(buffer, 1, sizeof(buffer), src_file)) != BUFFER_SIZE) {
             // check for errors
             if (ferror(src_file) != 0) {
+                printf("%s\n", src);
                 perror("Error reading file");
                 goto close_with_error;
             }
@@ -62,6 +65,7 @@ int copy_file(const char* src, const char* dest, mode_t permissions) {
 
         // Check for errors.
         if (bytes_written < 0) {
+            printf("%s\n", dest);
             perror("Error writing to file");
             goto close_with_error;
         }
@@ -69,6 +73,7 @@ int copy_file(const char* src, const char* dest, mode_t permissions) {
 
     // Set permissions on file.
     if (fchmod(fileno(dest_file), permissions) != 0) {
+        printf("%s\n", dest);
         perror("Error setting permissions on file");
         goto close_with_error;
     }
@@ -96,11 +101,13 @@ int create_directory(char *path, int permissions) {
         if (errno == EEXIST) {
             // Set the permissions
             if (chmod(path, permissions) != 0) {
+                printf("%s\n", path);
                 perror("Error setting permissions on directory");
                 return -1;
             }
         }
         else {
+            printf("%s\n", path);
             perror("Error creating directory");
             return -1;
         }
@@ -121,6 +128,7 @@ int copy_directory(const char *src, const char *dest) {
 
     // Check for error.
     if (dir == NULL) {
+        printf("%s\n", src);
         perror("Error opening directory");
         return -1;
     }
@@ -156,6 +164,7 @@ int copy_directory(const char *src, const char *dest) {
         // Retrieve information from the file / directory / not symlinks since we are ignoring for it of for now.
         struct stat src_st;
         if (stat(src_path, &src_st) < 0) {
+            printf("%s\n", src_path);
             perror("Error reading information about source file");
             *error = -1;
 
@@ -169,6 +178,7 @@ int copy_directory(const char *src, const char *dest) {
             // Retrieve information about the destination file to compare their lengths and permissions.
             struct stat dest_st;
             if (stat(dest_path, &dest_st) < 0 && errno != ENOENT) {
+                printf("%s\n", dest_path); 
                 perror("Error reading information about destination file");
                 *error = -1;
 
@@ -200,6 +210,7 @@ int copy_directory(const char *src, const char *dest) {
                     // Source hash has to exist but destination hash might not, that's why we only check for
                     // errors on the source hash.
                     if (src_hash == NULL) {
+                        printf("%s\n", src_path);
                         perror("Error reading hash from source");
                         *error = -1;
                     }
@@ -214,6 +225,7 @@ int copy_directory(const char *src, const char *dest) {
                     else if (src_st.st_mode != dest_st.st_mode) {
                         // Set permissions on file.
                         if (chmod(dest_path, src_st.st_mode) != 0) {
+                            printf("%s\n", dest_path);
                             perror("Error setting permissions on file");
                         }
                     }
