@@ -134,7 +134,7 @@ int copy_directory(const char *src, const char *dest) {
         }
 
         // Build source path.
-        char *src_path = malloc(sizeof(char) * (strlen(src) + strlen(sd->d_name) + 1));
+        char *src_path = malloc(sizeof(char) * (strlen(src) + strlen(sd->d_name) + 2));
         if (src_path == NULL) {
             perror("Error allocating memory.");
             *error = -1;
@@ -144,7 +144,7 @@ int copy_directory(const char *src, const char *dest) {
         strcat(strcat(src_path, "/"), sd->d_name);
 
         // Build destination path.
-        char *dest_path = malloc(sizeof(char) * (strlen(dest) + strlen(sd->d_name) + 1));
+        char *dest_path = malloc(sizeof(char) * (strlen(dest) + strlen(sd->d_name) + 2));
         if (dest_path == NULL) {
             perror("Error allocating memory.");
             *error = -1;
