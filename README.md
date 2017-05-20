@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/alexgarrett/violin.svg?branch=master)](https://travis-ci.org/alexgarrett/violin) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/alexgarrett/violin?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Build Status](https://travis-ci.org/alexgarrett/violin.svg?branch=master)](https://travis-ci.org/alexgarrett/violin) 
 
 ## Image Compressor
 An Image Compressor that will compress the size of any one image or multiple images from a directory.
@@ -16,19 +16,19 @@ Install using Composer.
 
 ## Usage
 
-#### Setup
+### Setup
 ```php
 $driver     = 'tinypng';
 $api_key    = '1234567890';
-$imageCompressor = new ImageCompressor($driver, $api_key);
+$imageCompressor = new \Maiden\Components\ImageCompressor($driver, $api_key);
 ```
 
-#### Compressing one image at a time
+### Compressing a single image
 ```php
 $imageCompressor->compressImage('path/to/my/image.jpg')->toPath('path/to/my/image.jpg')
 ```
 
-#### Compressing a whole directory of images recursively
+### Compressing a directory of images
 ```php
 $imageCompressor->compressFolder('path/to/my/directory')->toPath('path/to/my/output/directory');
 ```
