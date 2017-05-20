@@ -71,7 +71,7 @@ class ImageCompressor implements ImageCompressionInterface
                 mkdir(dirname($new_file), 0777, TRUE);
             }
 
-            if (folder_exist(dirname($new_file))) {
+            if ($this->folder_exists(dirname($new_file))) {
                 echo 'directory exists, so we create the file in that directory. ', $new_file, '<br>';
 
                 // have to check whether it's an image file or not, only then do we use tinypng to convert
@@ -85,14 +85,15 @@ class ImageCompressor implements ImageCompressionInterface
                 }
             }
         }
+
         return;
     }
 
-    function folder_exist($folder) {
+    function folder_exists($folder) {
         // Get canonicalized absolute pathname
         $path = realpath($folder);
 
         // If it exist, check if it's a directory
-        return ($path !== FALSE AND is_dir($path)) ? $path : FALSE;
+        return ($path !== false && is_dir($path)) ? $path : false;
     }
 }
