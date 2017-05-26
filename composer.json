@@ -1,5 +1,5 @@
 {
-  "name": "alexgarrett/violin",
+  "name": "maiden/image-compressor",
   "type": "library",
   "description": "Violin is an easy to use, highly customisable PHP validator.",
   "keywords": [
@@ -15,7 +15,7 @@
     }
   ],
   "require": {
-    "php": ">=5.4"
+    "php": ">=7.0"
   },
   "require-dev": {
     "squizlabs/php_codesniffer": "2.1.*",
@@ -23,7 +23,7 @@
   },
   "autoload": {
     "psr-4": {
-      "Violin\\": "src/"
+      "Maiden\\": "src/"
     }
   }
 }
